@@ -1,7 +1,7 @@
 ---
 name: requirements_write
 description: "Manager 起草需求文档 needs/requirements.md 的 skill。当 requirements_guide 判定 coverage_complete=true 且用户 approve 时**一定**加载本 skill。按 5 节模板从对话历史里提炼产出 needs/requirements.md。任何'需求已清、可以落文档'的时刻都走此 skill。"
-type: task
+type: reference
 ---
 
 # requirements_write — 起草 requirements.md

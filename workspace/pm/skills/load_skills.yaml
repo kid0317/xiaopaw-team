@@ -1,9 +1,9 @@
 skills:
   - name: product_design
-    type: task
+    type: reference
     enabled: true
   - name: review_tech_design_from_pm
-    type: task
+    type: reference
     enabled: true
   - name: self_retrospective
     type: reference

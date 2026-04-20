@@ -1,7 +1,7 @@
 ---
 name: review_tech_design_from_qa
 description: "QA 从'接口可测性 + 错误码完整性'视角评审 RD 的 tech_design.md。当 QA 收到 type=review_request 且 subject 含'技术方案'的邮件时**一定**加载本 skill。检查每接口错误码齐全、schema 能 httpx 直接调、响应格式一致 → reviews/tech_design/qa_testability.md + review_done。所有'QA 看技术方案'的时刻走此 skill。"
-type: task
+type: reference
 ---
 
 # review_tech_design_from_qa — QA 视角评审技术方案

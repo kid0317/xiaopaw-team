@@ -1,7 +1,7 @@
 ---
 name: list_available_sops
 description: "Manager 扫描并列出已有 SOP 集合的 skill。当用户问'有哪些 SOP / 流程'或 Manager 自检是否需新建 SOP 时**一定**加载本 skill。扫 workspace/manager/skills/sop_* 目录，读每个 SKILL.md frontmatter 的 description，组装成列表。所有'列一下现有流程'触发都走此 skill。"
-type: task
+type: reference
 ---
 
 # list_available_sops — 列出已有 SOP

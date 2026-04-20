@@ -1,7 +1,7 @@
 ---
 name: tech_design
 description: "RD 技术方案 skill。当 RD 收到 type=task_assign 且 subject 含'技术方案'的邮件时，**一定**加载本 skill。读 design/product_spec.md → 选 FastAPI+SQLite 技术栈 → 按 6 节模板写 tech/tech_design.md → 发 task_done 回 Manager。把产品设计翻译成可实现蓝图时都用此 skill。"
-type: task
+type: reference
 ---
 
 # tech_design — 技术方案设计

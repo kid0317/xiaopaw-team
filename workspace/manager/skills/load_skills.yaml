@@ -7,16 +7,16 @@ skills:
     type: reference
     enabled: true
   - name: sop_write
-    type: task
+    type: reference
     enabled: true
   - name: list_available_sops
-    type: task
+    type: reference
     enabled: true
   - name: requirements_guide
     type: reference
     enabled: true
   - name: requirements_write
-    type: task
+    type: reference
     enabled: true
   - name: read_project_state
     type: reference

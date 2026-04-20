@@ -1,7 +1,7 @@
 ---
 name: test_design
 description: "QA 产出完整测试计划的 skill（风险分析 + 功能用例 + 边界/异常 + 端到端）。当 QA 收到 type=task_assign 且 subject 含'测试设计'的邮件时**一定**加载本 skill。读 requirements + product_spec + tech_design → 按 5 节模板写 qa/test_plan.md → task_done。所有'新项目 QA 开始测试设计'的时刻走此 skill。"
-type: task
+type: reference
 ---
 
 # test_design — 测试计划设计

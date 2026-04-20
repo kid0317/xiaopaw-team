@@ -96,9 +96,11 @@ class SendMailTool(BaseTool):
                 content=content,
                 project_id=project_id,
             )
-            # 自动注册 at=now+1s wake
+            # 自动注册 at=now+1s wake，**project_id 拼进 wake 消息**让收件 Agent 直接知道要读哪个邮箱
             job_id = tasks_store.schedule_wake(
-                self._cron_tasks_path, role=to, reason="new_mail", delay_ms=1000
+                self._cron_tasks_path,
+                role=to, reason="new_mail", delay_ms=1000,
+                project_id=project_id,
             )
             return json.dumps(
                 {

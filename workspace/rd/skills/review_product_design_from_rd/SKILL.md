@@ -1,7 +1,7 @@
 ---
 name: review_product_design_from_rd
 description: "RD 从'技术可行性 + 实现成本'视角评审 PM 的 product_spec.md。当 RD 收到 type=review_request 且 subject 含'产品设计'的邮件时**一定**加载本 skill。评估功能是否 FastAPI+SQLite 栈内实现、给估时、标黑洞、建议砍/延后 → reviews/product_design/rd_feasibility.md + review_done。所有'RD 看产品设计'的时刻走此 skill。"
-type: task
+type: reference
 ---
 
 # review_product_design_from_rd — RD 视角评审产品设计

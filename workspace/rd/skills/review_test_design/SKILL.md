@@ -1,7 +1,7 @@
 ---
 name: review_test_design
 description: "RD 从'边界完备性 + 可自动化'视角评审 QA 的 qa/test_plan.md。当 RD 收到 type=review_request 且 subject 含'测试设计'的邮件时**一定**加载本 skill。检查边界/异常用例齐全 + 用例能 pytest 化 + 覆盖目标合理 → reviews/test_design/rd_boundary.md + review_done。所有'RD 看测试设计'的时刻走此 skill。"
-type: task
+type: reference
 ---
 
 # review_test_design — RD 视角评审测试设计

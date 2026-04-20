@@ -1,7 +1,7 @@
 ---
 name: product_design
 description: "PM 产品设计 skill。当 PM 收到 type=task_assign 且 subject 含'产品设计'的邮件时，**一定**加载本 skill。读 needs/requirements.md → 按 6 节模板产出完整 design/product_spec.md → 发 task_done 回 Manager。任何新的产品需求到来时都用此 skill 作为第一道工序。"
-type: task
+type: reference
 ---
 
 # product_design — 产品设计

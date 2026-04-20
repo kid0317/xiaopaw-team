@@ -1,7 +1,7 @@
 ---
 name: review_product_design_from_qa
 description: "QA 从'可测性 + 验收清晰度'视角评审 PM 的 product_spec.md。当 QA 收到 type=review_request 且 subject 含'产品设计'的邮件时**一定**加载本 skill。检查 Acceptance 能否 pytest 化、模糊词是否有量化、异常路径是否定义预期 → reviews/product_design/qa_testability.md + review_done。所有'QA 看产品设计'的时刻走此 skill。"
-type: task
+type: reference
 ---
 
 # review_product_design_from_qa — QA 视角评审产品设计

@@ -37,18 +37,42 @@ kind: sop
 - 含修改意见 → 更新 `needs/requirements.md`（调 `write_shared`）+ 再发 checkpoint
 
 ### 阶段 2-4：流水线推进
-**收到 `type=task_done` 邮件时**（PM / RD / QA 交付到 Manager inbox）：
+
+**阶段切换硬规则（必须严格遵守，不能合并）**：
+
+| 当前 task_done 来自 | 下一 task_assign | subject | 必须独立发送 |
+|-------------------|-----------------|---------|-----------|
+| PM（含 design/product_spec.md）| to=rd | "技术方案设计 (第 1 轮)" | ✅ 仅技术方案，不含实现 |
+| RD（含 tech/tech_design.md）| to=rd | "代码实现 (第 1 轮)" | ✅ **单独再发一次** task_assign 让 RD 写 code/ + 单测 |
+| RD（含 code/main.py + code/tests/）| to=qa | "测试设计 (第 1 轮)" | ✅ 仅测试设计，不含执行 |
+| QA（含 qa/test_plan.md）| to=qa | "测试执行 (第 1 轮)" | ✅ **单独再发一次** task_assign 让 QA 跑 pytest |
+| QA（含 qa/test_report.md 且全 pass）| — | — | 进入阶段 5 交付 |
+
+**不要做的事**：
+- 🚫 subject="技术设计与实现" — 这是一条消息做两件事，RD 会漏做实现
+- 🚫 subject="测试设计与执行" — QA 会漏做执行
+- 🚫 没收到 RD 的"代码实现完成"就派 QA —— code/ 目录还没产物可测
+- 🚫 没收到 QA 的"测试执行完成"就发 delivery —— 等 test_report.md 生成、且无 fail
+
+**收到每条 `type=task_done` 邮件时**：
 1. 调 `read_inbox(project_id)` → 拿到 task_done
 2. 加载 skill `check_review_criteria` → 按 5 条判据判 threshold_met
 3. threshold_met=false（常见情况）：
-   - `append_event("task_done_received", ...)`
+   - `append_event("task_done_received", {from_role, artifacts})`
    - 调 `mark_done(pid, msg_id)`
-   - 调 `send_mail(to=<下一角色>, type="task_assign", ...)`  推进
+   - 按上表 → 下一 task_assign 发送
 4. threshold_met=true：`append_event("decided_insert_review")` + 发 review_request ×2 → 等 review_done → 汇总决策
 
 ### 阶段 5：交付
-QA 的 test_report 到达且所有通过 → 调 `send_to_human(kind="delivery", project_id, checkpoint_id)` + `append_event("delivery_sent")`。
-用户 approve → `append_event("delivered")`。
+QA 的 test_report 到达且所有通过：
+1. 调 `append_event(pid, "delivery_requested", {...})`（交付准备好）
+2. 调 `send_to_human(routing_key=<用户rk>, message="交付汇报+验收请求", kind="delivery", project_id=pid, checkpoint_id="delivery-<pid>")`
+3. 记录到 events 的 `delivery_sent` 动作已由 send_to_human 自动写入
+
+用户 approve 回复（"同意/批准/验收通过"等）时：
+1. `append_event(pid, "delivered", {"artifacts_summary": ..., "deliverer_approved_at": "<ts>"})` **— 这一步必须做，否则交付未完成**
+2. `send_to_human(routing_key=<用户rk>, message="✅ 交付确认完成，感谢！", kind="info", project_id=pid)`
+3. 告知用户如需复盘，发"复盘"触发阶段 6
 
 ### 阶段 6：复盘（用户发"复盘/团队复盘"后）
 加载 skill `team_retrospective` → 产出 proposals → 加载 `review_proposal` → 分档审批。

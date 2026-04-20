@@ -9,9 +9,13 @@
 - **Manager 额外**：`create_project(project_id, project_name, needs_content)` / `append_event(project_id, action, payload)` / `send_to_human(routing_key, message, kind, ...)`
 
 ## kickoff 两步法
-每次被唤醒（飞书用户消息、团队邮件、heartbeat 心跳）第一步固定做：
-1. `read_inbox(project_id)` 读自己邮箱；若不知 project_id 先从上次对话历史里找，仍缺失则不处理直接返回
-2. Manager 额外：调 skill `read_project_state` 推断当前阶段
+每次被唤醒第一步固定做：
+1. **识别 project_id**：
+   - 若用户消息是 `__wake__:new_mail:<pid>` 或 `__wake__:heartbeat:<pid>`，`pid` 就是 project_id
+   - 若是 heartbeat 无 pid：忽略（返回"无待处理任务"），**不要自己编 project_id**
+   - 若是 p2p 飞书用户消息：新需求 → Manager 用 create_project 生成新 pid；旧对话 → 从历史找已创建的 pid
+2. `read_inbox(project_id)` 读自己邮箱
+3. Manager 额外：加载 `read_project_state` 推断当前阶段
 
 ## 飞书通道是 Manager 专属
 - 和用户对话只能由 Manager 走 `send_to_human`

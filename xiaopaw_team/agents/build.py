@@ -249,6 +249,7 @@ class TeamMemoryAwareCrew:
             inputs={
                 "user_message": self.user_message,
                 "history": _format_history(self._history_all),
+                "routing_key": self.routing_key or "",
             }
         )
 

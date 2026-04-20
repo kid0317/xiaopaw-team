@@ -1,7 +1,7 @@
 ---
 name: review_code
 description: "QA 从'可读性 + 测试完备性 + 异常路径处理'视角评审 RD 交付代码的 skill。当 QA 收到 type=review_request 且 subject 含'代码'的邮件时**一定**加载本 skill。抽关键文件读 + 检查每路由有单测 + 异常有 try/except + 复杂度合理 → reviews/code/qa_review.md + review_done。所有'QA 看代码'的时刻走此 skill。"
-type: task
+type: reference
 ---
 
 # review_code — QA 视角评审代码

@@ -1,7 +1,7 @@
 ---
 name: sop_write
 description: "Manager 把共创后的 SOP 落盘成一个新的 reference skill。当 sop_cocreate_guide 判定 coverage_complete + 用户 approve 时**一定**加载本 skill。产出带阶段表 + 推进规则 + 复盘触发的 SKILL.md，存入 needs/sop_draft.md（v0）或 workspace/manager/skills/sop_{name}/（v1）。所有'把对话沉淀成可复用流程'的时刻走此 skill。"
-type: task
+type: reference
 ---
 
 # sop_write — SOP 序列化为 skill

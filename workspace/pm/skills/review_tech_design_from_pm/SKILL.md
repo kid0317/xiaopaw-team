@@ -1,7 +1,7 @@
 ---
 name: review_tech_design_from_pm
 description: "PM 从'需求一致性 + 可验证性'视角评审 RD 的 tech_design.md。当 PM 收到 type=review_request 且 subject 含'技术方案'的邮件时**一定**加载本 skill。逐条检查 Acceptance 可否追溯 + 边界不被偷做 + 接口能否 httpx 测 → 出 reviews/tech_design/pm_consistency.md + review_done。所有'PM 看技术方案'的时刻走此 skill。"
-type: task
+type: reference
 ---
 
 # review_tech_design_from_pm — PM 视角评审技术方案

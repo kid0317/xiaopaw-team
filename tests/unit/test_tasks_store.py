@@ -33,6 +33,14 @@ def test_schedule_wake(tmp_path: Path) -> None:
     assert j["payload"]["message"].startswith("__wake__:new_mail")
 
 
+def test_schedule_wake_with_project_id(tmp_path: Path) -> None:
+    """wake message 拼 project_id 让 Agent 直接知道读哪个邮箱."""
+    p = tmp_path / "tasks.json"
+    tasks_store.schedule_wake(p, role="pm", reason="new_mail", project_id="todo-mvp")
+    jobs = tasks_store.list_jobs(p)
+    assert jobs[0]["payload"]["message"] == "__wake__:new_mail:todo-mvp"
+
+
 def test_schedule_heartbeat_replaces_existing(tmp_path: Path) -> None:
     p = tmp_path / "tasks.json"
     tasks_store.schedule_heartbeat(p, role="pm", interval_ms=30000, first_delay_ms=0)

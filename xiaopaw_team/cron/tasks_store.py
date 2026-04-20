@@ -98,13 +98,18 @@ def schedule_wake(
     role: str,
     reason: str = "new_mail",
     delay_ms: int = 1000,
+    project_id: str = "",
 ) -> str:
-    """注册一次性 team:{role} 唤醒（at=now+delay_ms，delete_after_run=True）."""
+    """注册一次性 team:{role} 唤醒（at=now+delay_ms，delete_after_run=True）.
+
+    project_id 会拼进消息 payload，Agent 读到后可直接 read_inbox(project_id).
+    """
+    tag = f":{project_id}" if project_id else ""
     return create_job(
         tasks_path,
         name=f"wake-{role}-{reason}-{_now_ms()}",
         routing_key=f"team:{role}",
-        message=f"__wake__:{reason}",
+        message=f"__wake__:{reason}{tag}",
         schedule_kind="at",
         at_ms=_now_ms() + delay_ms,
         delete_after_run=True,
