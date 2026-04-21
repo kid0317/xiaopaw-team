@@ -1,75 +1,362 @@
 # xiaopaw-team
 
-极客时间《企业级多智能体设计实战》模块四第 29 课实战项目：基于 xiaopaw（17/22 课）扩展为 Manager + PM + RD + QA 四角色数字员工团队，端到端完成一个真实 toC 项目并自我进化一次。
-
-## 状态
-
-✅ **生产级 v1.5 装配完成**（2026-04-21）。141 个非-LLM 测试全 PASS，1 个自驱动 handshake 集成测试 PASS。
-
-组件：
-- 基础设施（继承 17/22 课）：FeishuListener + Runner + SkillLoader + Sub-Crew + Sandbox + Cron + Memory
-- 团队层（29 课新增）：
-  - **8 个 Python Tools**（`xiaopaw_team/tools/team_tools.py`）：`SendMail/ReadInbox/MarkDone/ReadShared/WriteShared` + Manager 独占 `CreateProject/AppendEvent/SendToHuman`
-  - **feishu_bridge**（`xiaopaw_team/tools/feishu_bridge.py`）：CheckpointStore + classify（new_requirement / checkpoint_response / sop_cocreate / clarification_answer / need_discussion 五分类）
-  - **tasks_store**（`xiaopaw_team/cron/tasks_store.py`）：SendMailTool 自动 schedule_wake + 4 role heartbeat 错峰（0/7/14/21s）
-  - **main.py**：完整启动链（Manager asyncio.Lock / CronService dispatch_fn / 4 agent_fn）
-  - **36 个角色 skill**：Manager 11 / PM 4 / RD 5 / QA 7 / shared 2 + legacy mailbox_ops / self_score
-- 核心契约：SendMailTool → tasks.json → CronService → dispatch(team:role) → agent_fn_map[role] 完全自驱动，**零 Python 编排**
-
-## 文档
-
-完整设计文档在 **[docs/DESIGN.md](./docs/DESIGN.md)**。
-
-- [docs/](./docs/) — 设计文档目录（含 17/22 基础模块详设）
-- [docs/DESIGN.md](./docs/DESIGN.md) — **主设计文档**
-- [docs/history/](./docs/history/) — 版本迭代历史
-
-## 快速了解
-
-- **本课是什么**：把 25-28 课讲过的机制（角色体系 / 任务链协作协议 / Human as 甲方 / 自我进化）装配起来，配一个真实 demo 项目（"小爪子日记" toC 宠物日记网站），跑通端到端 + 自我进化
-- **基础来自哪里**：继承 xiaopaw-with-memory（17 课工具篇 + 22 课记忆篇）。基础设施（Listener/Runner/SkillLoader/Sub-Crew/Sandbox/Cron/Memory）完全复用，29 课只做团队层扩展
-- **核心原则**：单一接口（人只和 Manager）+ 零 Python 编排（流程全写在 SOP SKILL 里）+ Skill 类型边界（reference 对话框架 / task 一次性写入 / 主 Agent Tool 协作基础设施）
-
-## 架构速览
+> 极客时间《企业级多智能体设计实战》**第 29 课**实战项目。
+> 把 25-28 课讲过的 4 个机制（团队角色 / 任务链 / Human as 甲方 / 自我进化）**装配成一个能跑的多智能体团队**，端到端完成一个真实 toC 项目开发。
 
 ```
-L3 团队层（29 课新增）：4 Agent + 文件邮箱 + 事件流 + 飞书桥
-L2 记忆层（22 课）：Bootstrap + ctx.json + pgvector
-L1 基础层（17 课）：FeishuListener + Runner + SkillLoader + Sub-Crew + Sandbox + Cron
+┌──────────────────────────────────────────────────────────────────┐
+│   用户（飞书 / TestAPI）                                         │
+│                        │                                         │
+│                        ▼                                         │
+│   ┌──────────────  Manager  ──────────────┐                      │
+│   │   (唯一对外接口、SOP 主导者)          │                      │
+│   └───┬────────────┬────────────┬─────────┘                      │
+│       │ task_assign│ task_assign│ task_assign                    │
+│       ▼            ▼            ▼                                │
+│    ┌──PM──┐     ┌──RD──┐     ┌──QA──┐                            │
+│    │ 产品 │     │ 技术 │     │ 测试 │                            │
+│    │ 设计 │     │ 实现 │     │ 执行 │                            │
+│    └──┬───┘     └──┬───┘     └──┬───┘                            │
+│       └── task_done（邮箱 + 事件流） ──┘                          │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
-详细架构图和每个模块的设计详见 [docs/DESIGN.md](./docs/DESIGN.md)。
+---
 
-## 启动（设计完成后）
+## 1. 学员你将从这个项目学到什么
 
-### 首次安装
+- **多 Agent 团队怎么协作**：4 个数字员工通过**文件邮箱 + 事件流 + CronService 自唤醒** 完成 6 阶段流水线，**零 Python orchestrator 编排**
+- **Human as 甲方**：单一接口原则（人只和 Manager 对话），checkpoint 机制在关键节点让人审核
+- **Skill 生态进化**：Agent 通过"自我复盘 → 改进提案 → 分档审批 → 机械执行"完成自我进化
+- **production-ready 工程实践**：8 个 CrewAI Python Tools、37 个 Skill、完整单测+集成测试+E2E 全链路
+
+---
+
+## 2. 项目架构（三层继承）
+
+```
+L3 团队协作层（29 课新增）
+  ├── 4 个 Role Crew：Manager + PM + RD + QA
+  ├── 8 个 Python Tools：SendMail/ReadInbox/MarkDone/
+  │                      CreateProject/AppendEvent/SendToHuman/
+  │                      ReadShared/WriteShared
+  ├── File Mailbox：3 态机（unread→in_progress→done），FileLock 并发安全
+  ├── Event Log：append-only events.jsonl，单 writer（Manager）
+  ├── feishu_bridge：CheckpointStore + 5 分类 classify()
+  └── tasks_store：SendMail 自动 schedule_wake + heartbeat 错峰
+
+L2 记忆层（22 课继承）
+  ├── Bootstrap：读 soul/user/agent/memory.md 构造 backstory
+  ├── ctx.json / raw.jsonl：跨 session 持久化
+  └── pgvector 语义检索（可选）
+
+L1 基础设施层（17 课继承）
+  └── FeishuListener + Runner + SkillLoader + Sub-Crew + AIO-Sandbox + CronService
+```
+
+**核心契约**（29 课创新点）：
+
+```
+SendMailTool._run()
+  └→ mailbox.send_mail(...)                    # 写收件角色 json
+  └→ tasks_store.schedule_wake(project_id)     # 写 tasks.json 一个 at=now+1s job
+       └→ CronService detect mtime change (heat-reload)
+            └→ dispatch(InboundMessage routing_key="team:pm")
+                 └→ Runner._pick_agent_fn("team:pm")
+                      └→ agent_fn_map["pm"](message, ...)
+                           └→ PM Agent kickoff 处理 task
+```
+
+**这个自驱动循环替代了传统 multi-agent 里的 Python orchestrator**。发邮件 = 自动唤醒对方。
+
+---
+
+## 3. 目录结构
+
+```
+xiaopaw-team/
+├── README.md                          ← 本文档
+├── docs/
+│   ├── DESIGN.md                      主设计文档 (v1.5, 3500+ 行)
+│   ├── test-cases-e2e.md              E2E 测试用例清单（TC-F-001..007）
+│   ├── test-design.md                 测试设计文档（135 用例点）
+│   ├── design-modules.md              17/22 课基础模块详设
+│   ├── design-data.md                 数据格式详设
+│   ├── design-api.md                  飞书接口详设
+│   ├── design-observability.md        日志+指标详设
+│   └── history/                       版本迭代史
+│
+├── xiaopaw_team/                      ★ 主代码
+│   ├── main.py                        进程入口（build_runtime + 事件循环）
+│   ├── runner.py                      Runner：routing_key → agent_fn 分派
+│   ├── models.py                      InboundMessage / SenderProtocol
+│   ├── agents/
+│   │   ├── build.py                   ★ TeamMemoryAwareCrew 工厂
+│   │   ├── skill_crew.py              Sub-Crew（沙盒内跑 task skill）
+│   │   └── config/                    agents.yaml / tasks.yaml
+│   ├── tools/
+│   │   ├── team_tools.py              ★ 8 个 Python Tools
+│   │   ├── feishu_bridge.py           CheckpointStore + classify
+│   │   ├── mailbox.py                 邮箱三态机
+│   │   ├── event_log.py               append-only events.jsonl
+│   │   ├── workspace.py               权限化读写共享区
+│   │   ├── self_score.py              5 维加权自评
+│   │   ├── skill_loader.py            RoleScopedSkillLoaderTool（29 课）
+│   │   └── _skill_loader_base.py      SkillLoaderTool 基类（22 课）
+│   ├── cron/
+│   │   ├── service.py                 CronService + mtime hot-reload
+│   │   └── tasks_store.py             ★ write-then-rename + FileLock API
+│   ├── session/manager.py             Session persistence (22 课)
+│   ├── memory/                        Bootstrap + context_mgmt + indexer (22 课)
+│   ├── feishu/                        Listener + Sender + Downloader
+│   └── api/                           test_server + capture_sender
+│
+├── workspace/                         ★ 4 个角色的 Skill + 身份文件
+│   ├── manager/
+│   │   ├── soul.md / agent.md / user.md / memory.md   身份四件套
+│   │   └── skills/                                     11 个 skill
+│   │       ├── sop_feature_dev/       主 SOP（6 阶段推进规则）
+│   │       ├── requirements_guide/    需求 4 维澄清框架
+│   │       ├── requirements_write/    起草 needs/requirements.md
+│   │       ├── read_project_state/    推断项目阶段
+│   │       ├── check_review_criteria/ 评审判据
+│   │       ├── handle_checkpoint_reply/ 人类回复分档处理
+│   │       ├── team_retrospective/    团队复盘思考框架
+│   │       ├── review_proposal/       分档审批提案
+│   │       ├── list_available_sops/
+│   │       ├── sop_cocreate_guide/    SOP 共创 6 维
+│   │       ├── sop_write/             SOP 序列化
+│   │       └── mailbox_ops/           （legacy, 22 课沙盒版）
+│   ├── pm/    skills/ = product_design + review_tech_design_from_pm + …
+│   ├── rd/    skills/ = tech_design + code_impl + review_* + …
+│   ├── qa/    skills/ = test_design + test_run + review_* + …
+│   └── shared/
+│       ├── team_protocol.md           团队通用约定（Bootstrap 时注入）
+│       └── skills/self_retrospective + self_score
+│
+├── tests/
+│   ├── unit/                          131 个快速单测
+│   │   ├── test_team_tools.py          8 个 Python Tools 覆盖
+│   │   ├── test_mailbox.py             三态机 + FileLock
+│   │   ├── test_event_log.py           append-only + action 校验
+│   │   ├── test_workspace.py           permission + path traversal
+│   │   ├── test_feishu_bridge.py       classify + CheckpointStore
+│   │   ├── test_tasks_store.py         cron create/wake/dedup
+│   │   ├── test_self_score.py          5 维加权
+│   │   ├── test_log_query.py           日志 CLI
+│   │   ├── test_skill_quality.py       36 个 SKILL.md 静态校验
+│   │   └── test_main_bootstrap.py      main.build_runtime
+│   ├── integration/                   12 个集成测试（真实 FS, 无 LLM）
+│   │   ├── test_runner_routing.py
+│   │   ├── test_autonomous_handshake.py  ★ Manager→PM 自驱动
+│   │   └── e2e_full/                  ★ 8 个 E2E（真实 Qwen + 沙盒）
+│   │       ├── _driver.py             E2EDriver + WorkspaceSafeguard + AccumulatingSender
+│   │       ├── test_tc_f_001_happy_path.py   ★ 基线全链路
+│   │       ├── test_tc_f_002_review_loop.py  插评审分支
+│   │       ├── test_tc_f_003_qa_defect_rd_fix.py  QA defect → RD 修复
+│   │       ├── test_tc_f_004_checkpoint_revise.py 用户 revise 需求
+│   │       ├── test_tc_f_005_retrospective.py     交付后复盘
+│   │       ├── test_tc_f_006_code_fail_recovery.py pytest 失败自愈
+│   │       └── test_tc_f_007_sop_cocreate_first.py 先共创 SOP
+│   └── fixtures/
+│
+├── config.yaml.template               配置模板（不含密钥）
+├── config.yaml                        ← 本地配置（.gitignore，需自建）
+├── sandbox-docker-compose.yaml        AIO-Sandbox 容器定义
+├── pytest.ini                         marker 定义（unit / integration / e2e / e2e_full）
+└── pyproject.toml                     包定义
+```
+
+---
+
+## 4. 快速开始（学员最关心）
+
+### 4.1 环境要求
+
+| 依赖 | 版本 | 用途 |
+|------|------|------|
+| Python | 3.11+ | 主语言 |
+| Docker + docker-compose | 最新 | AIO-Sandbox 容器 |
+| Qwen API Key | Aliyun DashScope | LLM（可替换为其他 CrewAI 兼容 LLM） |
+| （可选）pgvector | — | 语义检索；不用可留 `db_dsn=""` |
+
+### 4.2 安装
 
 ```bash
-# 1. 启沙盒
+# 1. 克隆项目
+git clone git@github.com:kid0317/xiaopaw-team.git
+cd xiaopaw-team
+
+# 2. 创建虚拟环境 + 装依赖
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e .
+
+# 3. 复制配置模板，按需填写飞书凭证（smoke 可跳过飞书）
+cp config.yaml.template config.yaml
+# 编辑 config.yaml 填入 feishu.app_id / app_secret（或留空用 --no-feishu）
+
+# 4. 设环境变量
+export QWEN_API_KEY=sk-xxxxxxxxxxxx     # 必需
+export SANDBOX_URL=http://localhost:8029/mcp  # 可选，默认值
+
+# 5. 启动 AIO-Sandbox（后台跑）
 docker-compose -f sandbox-docker-compose.yaml up -d
 
-# 2. （可选）启 pgvector
-docker-compose -f pgvector-docker-compose.yaml up -d
+# 6. 验证沙盒健康
+curl http://localhost:8029/  # 期望返回 200
+```
 
-# 3. workspace 初始化为独立 git 仓库（apply_proposal 需要）
-cd workspace
-git init
-git add .
-git commit -m "workspace baseline v1.0"
-cd ..
+### 4.3 跑起来（两种模式）
 
-# 4. 启主进程
+#### Mode A：仅跑 Cron + 不接飞书（最简单，推荐首次）
+
+```bash
+python -m xiaopaw_team.main --no-feishu
+```
+
+进程启动后不会做任何事——**等用户通过 TestAPI 发消息**（或等 heartbeat）。
+可通过 `tests/integration/test_autonomous_handshake.py` 直接 dispatch 消息进来观察行为。
+
+#### Mode B：完整生产模式（接飞书）
+
+```bash
+# 确保 config.yaml.feishu.app_id/secret 已填
 python -m xiaopaw_team.main
 ```
 
-### 日常启动
+进程会：
+1. 启 4 role agent_fn + Manager 全局 Lock
+2. 启 CronService（heartbeat 4 role 错峰 0/7/14/21s，默认 30s 间隔）
+3. 启 FeishuListener（WebSocket，无需公网 IP）
+4. 等用户 @机器人
+
+---
+
+## 5. 跑测试
+
+### 5.1 快测（非-LLM，< 20s）
 
 ```bash
-docker-compose -f sandbox-docker-compose.yaml up -d
-python -m xiaopaw_team.main
+pytest tests/unit tests/integration -m "not e2e and not e2e_full" -v
+# 预期：143 passed, 9 deselected
 ```
 
-## 相关项目
+### 5.2 E2E 基线：TC-F-001（真实 Qwen + 沙盒，约 13 min）
 
-- [xiaopaw-with-memory](../xiaopaw-with-memory/) — 17/22 课工作助手，本项目基础
-- [crewai_mas_demo/m4l25-m4l28](../crewai_mas_demo/) — 25-28 课知识点演示代码
+```bash
+# 前置：沙盒跑着 + QWEN_API_KEY 设好
+pytest tests/integration/e2e_full/test_tc_f_001_happy_path.py -v -m e2e_full -s
+# 预期：1 passed in ~13:00
+# 产出：workspace/shared/projects/todo-mvp/ 下的完整 6 阶段产物
+```
+
+跑完后你会看到：
+- `needs/requirements.md`（Manager 起草）
+- `design/product_spec.md`（PM 写）
+- `tech/tech_design.md`（RD 写）
+- `code/*.py`（RD 实现 + 单测）
+- `qa/test_plan.md` + `qa/test_report.md`（QA）
+- `events.jsonl` 完整事件链
+- `mailboxes/{manager,pm,rd,qa}.json` 邮件历史
+
+**注意**：测试跑完后 `WorkspaceSafeguard` 会**自动还原 workspace/** 到初始状态，防止污染。若想看产物，可在测试过程中 `cat` 对应文件，或在 test 结束前加断点。
+
+### 5.3 E2E 变体（6 个分支场景）
+
+```bash
+# 全部跑（约 60-90 min，真实 LLM + 沙盒）
+pytest tests/integration/e2e_full/ -v -m e2e_full -s
+
+# 单独跑
+pytest tests/integration/e2e_full/test_tc_f_002_review_loop.py -v -m e2e_full -s
+```
+
+| 变体 | 测试目标 |
+|------|---------|
+| `tc_f_001_happy_path` | ✅ 基线：6 阶段全链路产出 |
+| `tc_f_002_review_loop` | PM 产品设计插入团队评审分支 |
+| `tc_f_003_qa_defect_rd_fix` | QA 发现 defect → RD 修复循环 |
+| `tc_f_004_checkpoint_revise` | 用户对需求 checkpoint 回 "revise" |
+| `tc_f_005_retrospective` | 交付后复盘 + 进化分档审批 |
+| `tc_f_006_code_fail_recovery` | RD pytest 失败 → 读 stderr 自愈 |
+| `tc_f_007_sop_cocreate_first` | 先与用户共创 SOP 再跑功能开发 |
+
+**注意**：E2E 变体对 LLM 稳定性敏感。一轮跑全 6 个可能 3-4 个过；失败的通常重跑一次就过。**TC-F-001 baseline 已稳定 PASS。**
+
+### 5.4 单独跑自驱动 handshake（最快验证系统 wiring）
+
+```bash
+pytest tests/integration/test_autonomous_handshake.py -v
+# 5s 内完成，不用 LLM，验证 Manager → PM 通过 SendMail + Cron 自动唤醒能否跑通
+```
+
+---
+
+## 6. 看懂流程（关键路径）
+
+### 新需求进来，会发生什么
+
+1. **用户飞书发消息**："帮我做个 TODO 网站"
+2. **FeishuListener** → 封装成 `InboundMessage(routing_key="p2p:<open_id>", content="帮我做个...")` → `runner.dispatch()`
+3. **Runner** → 按 routing_key 找 agent_fn：`p2p:*` 固定走 Manager
+4. **Manager agent_fn**（TeamMemoryAwareCrew with role=manager）→ Bootstrap 读 manager/soul/user/agent/memory.md 注入 backstory → CrewAI kickoff
+5. **Manager LLM 决策**：加载 `sop_feature_dev` skill + `requirements_guide` skill → 4 维评估 → 调用 Python Tools：
+   - `create_project(project_id="todo-mvp", ...)` → 创建 workspace/shared/projects/todo-mvp/ 目录树
+   - `append_event("requirements_drafted", ...)`
+   - `send_to_human(kind="checkpoint_request", message="需求摘要...")`
+   - `send_mail(to="pm", type="task_assign", subject="产品设计 (第 1 轮)", ...)`
+6. **SendMailTool 内部**：写 pm.json + `tasks_store.schedule_wake(role="pm", project_id="todo-mvp")` 一个 at=now+1s job
+7. **CronService** 下一轮 tick（50ms 周期）检测 tasks.json mtime 变了 → reload → 发现 at 到期 → `dispatch(InboundMessage(routing_key="team:pm", content="__wake__:new_mail:todo-mvp"))`
+8. **PM agent_fn** 被唤醒 → `read_inbox("todo-mvp")` 读 task_assign → 加载 `product_design` skill → `write_shared("design/product_spec.md", ...)` → `send_mail(to="manager", type="task_done", ...)`
+9. **回到 Manager**，按 SOP 推进到 RD → QA → 交付
+
+**全程没有任何中心化 Python orchestrator 驱动**。Cron + SendMail 的闭环就是驱动引擎。
+
+---
+
+## 7. 常见问题
+
+### Q: Manager 不夹带任务给 PM，只给用户回文字？
+
+Manager LLM 偶现"只说不做"（回复"已分派"但不实际调 send_mail）。应对：
+1. 查 `workspace/manager/skills/sop_feature_dev/SKILL.md` 是否仍在 critical rules 里说"必须调 send_mail 工具而非只回复文字"
+2. 查 `workspace/shared/team_protocol.md` 是否包含"防只说不做"约束
+3. 若仍然不稳定，重跑一次（LLM 变率）；或切换到 Opus / GPT-4 等更指令遵循的 LLM
+
+### Q: 怎么看 Manager 当前在干啥？
+
+运行时产物都在 `workspace/shared/projects/{project_id}/`：
+- `events.jsonl` — 事件流（Manager 写）
+- `mailboxes/*.json` — 4 个角色邮箱
+- `needs/` `design/` `tech/` `code/` `qa/` `reviews/` — 产物目录
+
+会话记录在 `data/ctx/s-*.jsonl`（每次 LLM turn 的完整 raw messages）。
+
+### Q: 沙盒为什么不用 local Python 就跑？
+
+Code_impl 和 test_run 这两个 task skill 需要运行 bash + pytest，必须隔离环境（防止污染开发机 + 支持任意依赖 pip install）。普通写文件类 skill（product_design / tech_design / test_design / review_*）用 host 端 Python Tools，不走沙盒。
+
+### Q: E2E 测试会污染我的 workspace 吗？
+
+不会。`WorkspaceSafeguard` 在 test setup 时 rsync 整目录到 `tmp_path/workspace_backup`，teardown 时清空 workspace 后再从备份 rsync 回来。即使测试过程中 Agent 误改了 skill 文件也会被还原。
+
+### Q: `OpenAI API call failed: 401` 一直在 log 里刷？
+
+那是 CrewAI 的 `_summarize_chunk`（上下文压缩功能）默认调 OpenAI。我们用 Qwen 不影响主流程，是良性噪声。可通过设置 `OPENAI_API_KEY=<valid_key>` 消除或把 `context_mgmt.py` 里的 `_summarize_chunk` 替换为 Qwen 实现。
+
+---
+
+## 8. 设计文档
+
+进阶阅读：
+- **[docs/DESIGN.md](./docs/DESIGN.md)** — 主设计文档 v1.5（3500+ 行，完整架构 + 32 skill 清单 + 6 阶段流程详解）
+- **[docs/test-cases-e2e.md](./docs/test-cases-e2e.md)** — E2E 测试用例设计（7 个变体 + 覆盖矩阵）
+- **[docs/test-design.md](./docs/test-design.md)** — 测试设计（风险分析 F×5/H×8/M×10/L×5, 135 测试点）
+
+---
+
+## 9. 相关项目
+
+- [xiaopaw-with-memory](../xiaopaw-with-memory/) — 17/22 课单 Agent 版本，本项目基础
+- [crewai_mas_demo](../crewai_mas_demo/) — 25-28 课概念演示代码

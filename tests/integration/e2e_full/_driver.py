@@ -350,7 +350,7 @@ class E2EDriver:
         *,
         condition: Callable[[], bool],
         condition_label: str,
-        fallback_reply: str = (
+        fallback_reply: str | Callable[[], str] = (
             "由你全权决定，所有合理默认值都批准同意。"
             "请立刻调用 create_project 工具创建项目并起草 needs/requirements.md，"
             "然后按 SOP 推进产品设计阶段。"
@@ -377,7 +377,8 @@ class E2EDriver:
             rounds += 1
             print(f"[AUTO_ANSWER] round {rounds}: replying to push past clarification")
             last_bot_count = len(self.sender.messages)
-            await self.say(fallback_reply)
+            reply_text = fallback_reply() if callable(fallback_reply) else fallback_reply
+            await self.say(reply_text)
             # 给 bot 时间回复（最多 300s 或剩余 deadline）
             try:
                 await self.wait_until(

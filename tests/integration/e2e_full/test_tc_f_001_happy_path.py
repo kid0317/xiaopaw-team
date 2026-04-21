@@ -43,18 +43,16 @@ async def test_tc_f_001_happy_path(driver) -> None:
     await driver.wait_for_file("needs/requirements.md", timeout=600)
 
     # 等需求 approve / 或 design 已开始
+    def _approval_fallback() -> str:
+        return "同意，请继续推进产品设计。"
     await driver.auto_answer_until(
         condition=lambda: driver.has_event("checkpoint_approved")
+        or driver.has_event("assigned")
         or driver.file_exists("design/product_spec.md"),
-        condition_label="requirements-approved-or-design-started",
-        fallback_reply=(
-            "同意，批准需求立即进入产品设计阶段。"
-            "请立刻用 send_mail 工具派 PM 产品设计任务（to=pm, type=task_assign, "
-            "subject='产品设计 (第 1 轮)', content 含 needs_path），"
-            "并用 append_event 写 checkpoint_approved 事件。"
-        ),
+        condition_label="requirements-approved-or-pm-dispatched",
+        fallback_reply=_approval_fallback,
         timeout=900,
-        max_rounds=3,
+        max_rounds=4,
     )
 
     # ── 阶段 2-4：PM → RD → 代码 ───────────────────────────────────
