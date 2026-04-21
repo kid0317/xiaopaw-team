@@ -184,7 +184,7 @@ class MemoryAwareCrew:
 
         return Agent(
             **cfg,
-            llm     = AliyunLLM(model="qwen3-max", region="cn", temperature=0.3),
+            llm     = AliyunLLM(model="qwen3.6-max-preview", region="cn", temperature=0.3),
             tools   = tools,
             verbose = True,
         )

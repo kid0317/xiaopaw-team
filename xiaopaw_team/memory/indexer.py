@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 _QWEN_API_KEY  = os.getenv("QWEN_API_KEY", "")
 _EMBED_MODEL   = "text-embedding-v3"
 _EMBED_DIM     = 1024
-_EXTRACT_MODEL = "qwen3-max"
+_EXTRACT_MODEL = "qwen3.6-max-preview"
 
 _EXTRACT_PROMPT = """\
 分析以下一轮对话，提取结构化信息，以 JSON 格式返回：

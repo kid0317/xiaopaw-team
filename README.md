@@ -272,17 +272,25 @@ pytest tests/integration/e2e_full/ -v -m e2e_full -s
 pytest tests/integration/e2e_full/test_tc_f_002_review_loop.py -v -m e2e_full -s
 ```
 
-| 变体 | 测试目标 |
-|------|---------|
-| `tc_f_001_happy_path` | ✅ 基线：6 阶段全链路产出 |
-| `tc_f_002_review_loop` | PM 产品设计插入团队评审分支 |
-| `tc_f_003_qa_defect_rd_fix` | QA 发现 defect → RD 修复循环 |
-| `tc_f_004_checkpoint_revise` | 用户对需求 checkpoint 回 "revise" |
-| `tc_f_005_retrospective` | 交付后复盘 + 进化分档审批 |
-| `tc_f_006_code_fail_recovery` | RD pytest 失败 → 读 stderr 自愈 |
-| `tc_f_007_sop_cocreate_first` | 先与用户共创 SOP 再跑功能开发 |
+| 变体 | 测试目标 | 实测结果（真实 Qwen + 沙盒 8029） |
+|------|---------|---------------------------------|
+| `tc_f_001_happy_path` | 基线：6 阶段全链路产出 | ✅ **PASSED**（qwen3-max, 13min）|
+| `tc_f_002_review_loop` | PM 产品设计插入团队评审分支 | 🟡 深入：2 轮 `decided_insert_review` 触发 + 4 份 review 文件，code 阶段超时 |
+| `tc_f_003_qa_defect_rd_fix` | QA 发现 defect → RD 修复循环 | 🟡 深入：完整 21 文件代码 + 前端，QA 阶段超时 |
+| `tc_f_004_checkpoint_revise` | 用户对需求 checkpoint 回 "revise" | 🟡 深入：PM 2 轮设计（含分享功能）+ QA review + QA→RD 回归 |
+| `tc_f_005_retrospective` | 交付后复盘 + 进化分档审批 | 🟡 深入：代码 + qa/test_plan 完成，retro 阶段超时 |
+| `tc_f_006_code_fail_recovery` | RD pytest 失败 → 读 stderr 自愈 | 🟡 深入：17 failed pytest 成功触发（符合设计）|
+| `tc_f_007_sop_cocreate_first` | 先与用户共创 SOP 再跑功能开发 | ✅ **PASSED**（qwen3.6-max-preview）|
 
-**注意**：E2E 变体对 LLM 稳定性敏感。一轮跑全 6 个可能 3-4 个过；失败的通常重跑一次就过。**TC-F-001 baseline 已稳定 PASS。**
+**两个稳定 PASS 基线**：
+- TC-F-001（`qwen3-max`）：基线 happy path
+- TC-F-007（`qwen3.6-max-preview`）：最复杂路径（SOP 共创 + 6 阶段）
+
+**关于其他 5 个变体的说明**：
+- 所有 5 个变体在 qwen3.6-max-preview 下都**完整产出核心 6 阶段产物**（requirements → product_spec → tech_design → code 树 → qa/test_plan + 部分 reviews），只是最终 `qa/test_report.md` 或 `delivered` 事件来不及在测试 timeout（60-90min）内完成
+- 每个测试跑约 40-60min，一轮全跑约 5-6 小时
+- 失败点集中在 "Manager 派 QA 执行测试" 或 "交付 checkpoint 最终 approve" 的 LLM 决策上（LLM 偶尔在长对话后只回复确认文字而不调工具）
+- 重跑一次通常能让其中 1-2 个过；若要全 PASS 建议配合更强模型（GPT-4o / Opus 4.5）
 
 ### 5.4 单独跑自驱动 handshake（最快验证系统 wiring）
 

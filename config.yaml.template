@@ -8,10 +8,13 @@ feishu:
   app_secret: "<YOUR_FEISHU_APP_SECRET>"
 
 agent:
-  model: "qwen3-max"
+  # 可选模型（按 E2E 实测效果排序）：
+  #   - qwen3.6-max-preview  更强 tool calling + SOP 遵循；TC-F-007 sop 共创 E2E PASS
+  #   - qwen3-max            TC-F-001 happy_path E2E PASS
+  model: "qwen3.6-max-preview"
   max_iter: 30
   max_input_tokens: 30000
-  sub_agent_model: "qwen3-max"
+  sub_agent_model: "qwen3.6-max-preview"
   sub_agent_max_iter: 20
   timeout_s: 300
 
