@@ -363,20 +363,31 @@ class SendToHumanTool(BaseTool):
                 ensure_ascii=False,
             )
         # 发消息
+        # 💡 修复 C1：改用同步 sender 封装避免 fut.result 阻塞事件循环导致死锁
         if self._sender is None:
             logger.warning("SendToHumanTool: sender is None; skip feishu send (test mode)")
         else:
             try:
                 import asyncio
+                import threading
 
-                # Tool _run 是同步；用 asyncio.run 不安全（嵌套）；推断当前 loop
-                try:
-                    loop = asyncio.get_running_loop()
-                    coro = self._sender.send(routing_key, message, root_id="")
-                    fut = asyncio.run_coroutine_threadsafe(coro, loop)
-                    fut.result(timeout=15)
-                except RuntimeError:
-                    asyncio.run(self._sender.send(routing_key, message, root_id=""))
+                coro = self._sender.send(routing_key, message, root_id="")
+                # 在独立线程跑自己的 event loop，避免和主 loop 互相等待
+                result_err: list[BaseException] = []
+
+                def _run_in_thread() -> None:
+                    try:
+                        asyncio.run(coro)
+                    except BaseException as e:  # noqa: BLE001
+                        result_err.append(e)
+
+                t = threading.Thread(target=_run_in_thread, daemon=True)
+                t.start()
+                t.join(timeout=15)
+                if t.is_alive():
+                    logger.warning("send_to_human: feishu send timed out after 15s, continuing anyway")
+                elif result_err:
+                    logger.warning("send_to_human: feishu send raised %s; continuing anyway", result_err[0])
             except Exception as exc:
                 logger.exception("send_to_human: feishu send failed")
                 return json.dumps({"errcode": 1, "errmsg": str(exc)}, ensure_ascii=False)

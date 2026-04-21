@@ -11,6 +11,8 @@ import json
 import re
 from pathlib import Path
 
+from filelock import FileLock
+
 # v1.3-P2-20：严格白名单 + 强制 topic 后缀
 REVIEWS_PATTERN = re.compile(
     r"^reviews/([a-z_]+)/(manager|pm|rd|qa)_([a-z0-9_]+)\.md$"
@@ -91,8 +93,13 @@ def write_shared(
     check_write(role, rel_path)
     proj = _project_root(workspace_root, project_id)
     full = proj / rel_path
+    # 💡 修复 H4：FileLock 保护并发写同文件（两个 review 同时写 reviews/xxx/*.md）
     full.parent.mkdir(parents=True, exist_ok=True)
-    full.write_text(content, encoding="utf-8")
+    with FileLock(str(full) + ".lock"):
+        # 先写 tmp，再 rename，保证原子性
+        tmp = full.with_suffix(full.suffix + ".tmp")
+        tmp.write_text(content, encoding="utf-8")
+        tmp.rename(full)
 
 
 def read_shared(

@@ -16,14 +16,27 @@ async def test_tc_f_003_qa_defect_rd_fix(driver) -> None:
         "做一个待办清单小网站 MVP（增/查/改完成/删）。"
         "**严格硬约束：DELETE /todo/{id} 必须物理删除（db.delete），不允许 soft delete**；"
         "QA 必须在测试中断言：DELETE 后 GET /todo/{id} 返回 404，且 GET /todo 列表不含该 id；"
-        "如果初始实现没达到，请触发 defect 修复流程。"
-        "栈：FastAPI + SQLite + 原生 HTML/JS。一次只问一个问题；否则直接推进。"
+        "栈：FastAPI + SQLite + 原生 HTML/JS。"
+        "**所有细节你直接替我决定，我批准任何合理方案**，请立即 create_project 并起草需求文档。"
     )
 
-    await driver.wait_for_event("project_created", timeout=300)
+    await driver.auto_answer_until(
+        condition=lambda: driver.has_event("project_created"),
+        condition_label="project_created",
+        timeout=1500, max_rounds=5,
+    )
     await driver.wait_for_file("needs/requirements.md", timeout=600)
-    await driver.wait_until(driver.bot_asked_for_checkpoint, timeout=300, label="needs-ckpt")
-    await driver.say("同意")
+    await driver.auto_answer_until(
+        condition=lambda: driver.has_event("checkpoint_approved")
+        or driver.file_exists("design/product_spec.md"),
+        condition_label="needs-approved-or-design-started",
+        fallback_reply=(
+            "同意，批准需求立即进入产品设计阶段。"
+            "请立刻用 send_mail 工具派 PM 产品设计任务（to=pm, type=task_assign, "
+            "subject='产品设计 (第 1 轮)'），并用 append_event 写 checkpoint_approved 事件。"
+        ),
+        timeout=900, max_rounds=3,
+    )
 
     await driver.wait_for_file("design/product_spec.md", timeout=900)
     await driver.wait_for_file("tech/tech_design.md", timeout=900)

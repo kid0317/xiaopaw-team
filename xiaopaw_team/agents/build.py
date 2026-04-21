@@ -335,22 +335,17 @@ def build_team_agent_fn(
 # 代价：失去"PM 和 QA 并行"这种微并行（但 Manager 本来就是单实例串行；
 # 且本项目 demo 项目体量小，串行不构成吞吐瓶颈）。
 
-_TEAM_GLOBAL_LOCK: asyncio.Lock | None = None
+def wrap_with_lock(agent_fn: AgentFn, lock: asyncio.Lock | None = None) -> AgentFn:
+    """把 agent_fn 套入 lock。如果 lock=None（保持向后兼容），为该 agent 单独新建。
 
-
-def _get_team_lock() -> asyncio.Lock:
-    global _TEAM_GLOBAL_LOCK
-    if _TEAM_GLOBAL_LOCK is None:
-        _TEAM_GLOBAL_LOCK = asyncio.Lock()
-    return _TEAM_GLOBAL_LOCK
-
-
-def wrap_with_lock(agent_fn: AgentFn) -> AgentFn:
-    """把 agent_fn 套入全局 team 锁，保证任一时刻只有一个角色 crew 在跑 LLM."""
+    💡 修复 C2：锁不再模块级缓存（之前绑定到首个 event loop，多次 asyncio.run 会失败）.
+    """
+    if lock is None:
+        lock = asyncio.Lock()
 
     async def wrapped(user_message, history, session_id,
                       routing_key="", root_id="", verbose=False) -> str:
-        async with _get_team_lock():
+        async with lock:
             return await agent_fn(user_message, history, session_id,
                                   routing_key, root_id, verbose)
 

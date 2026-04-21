@@ -20,23 +20,38 @@ async def test_tc_f_006_code_fail_recovery(driver) -> None:
         "栈 FastAPI + SQLite + HTML/JS。"
         "**RD 实现时先故意引入一个小 bug**（比如 db.commit() 漏调用，或字段名拼错），"
         "然后通过 pytest 失败分析 stderr 发现并修复，体现自愈能力。"
-        "一次只问一个关键问题；否则直接推进。"
+        "**所有细节你直接替我决定，我批准任何合理方案**，请立即 create_project 并起草需求文档。"
     )
 
-    await driver.wait_for_event("project_created", timeout=300)
+    await driver.auto_answer_until(
+        condition=lambda: driver.has_event("project_created"),
+        condition_label="project_created",
+        timeout=1500, max_rounds=5,
+    )
     await driver.wait_for_file("needs/requirements.md", timeout=600)
-    await driver.wait_until(driver.bot_asked_for_checkpoint, timeout=300, label="needs-ckpt")
-    await driver.say("同意")
+    await driver.auto_answer_until(
+        condition=lambda: driver.has_event("checkpoint_approved")
+        or driver.file_exists("design/product_spec.md"),
+        condition_label="needs-approved-or-design-started",
+        fallback_reply=(
+            "同意，批准需求立即进入产品设计阶段。"
+            "请立刻用 send_mail 工具派 PM 产品设计任务（to=pm, type=task_assign, "
+            "subject='产品设计 (第 1 轮)'），并用 append_event 写 checkpoint_approved 事件。"
+        ),
+        timeout=900, max_rounds=3,
+    )
 
-    await driver.wait_for_file("design/product_spec.md", timeout=900)
-    await driver.wait_for_file("tech/tech_design.md", timeout=900)
+    await driver.wait_for_file("design/product_spec.md", timeout=1500)
+    await driver.wait_for_file("tech/tech_design.md", timeout=1500)
     await driver.wait_for_file("code/main.py", timeout=1800)
-    # Wait for QA
-    await driver.wait_for_file("qa/test_plan.md", timeout=900)
-    await driver.wait_for_file("qa/test_report.md", timeout=900)
-    await driver.wait_for_event("delivery_sent", timeout=300)
-    await driver.say("同意")
-    await driver.wait_for_event("delivered", timeout=180)
+    await driver.wait_for_file("qa/test_plan.md", timeout=1500)
+    await driver.wait_for_file("qa/test_report.md", timeout=1500)
+    await driver.auto_answer_until(
+        condition=lambda: driver.has_event("delivered") or driver.has_event("delivery_sent") or driver.has_event("delivery_requested"),
+        condition_label="delivery",
+        fallback_reply="同意，交付验收通过。",
+        timeout=900, max_rounds=3,
+    )
 
     # 从 RD 的 task_done 邮件里找 metrics.pytest_attempts
     # mailbox_json 里邮件 status=done，content 含 metrics

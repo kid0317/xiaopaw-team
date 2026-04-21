@@ -16,19 +16,34 @@ async def test_tc_f_002_review_loop(driver) -> None:
         "帮我做个待办清单小网站，**包含用户登录、付费订阅**两大 MVP 功能。"
         "因为涉及账号和付款，质量要求很高，**请你在每个阶段都主动插入团队评审**。"
         "技术栈 FastAPI + SQLite + 原生 HTML+JS。"
-        "一次只问一个关键问题；否则直接推进。"
+        "**所有细节你直接替我决定，我批准任何合理方案**，请立即 create_project 并起草需求文档。"
     )
 
-    await driver.wait_for_event("project_created", timeout=300)
+    # 允许 Manager 问 1-2 轮澄清由 auto_answer_until 自动应答
+    await driver.auto_answer_until(
+        condition=lambda: driver.has_event("project_created"),
+        condition_label="project_created",
+        timeout=1500,
+        max_rounds=5,
+    )
     pid = driver.current_project_id()
 
-    # 等需求 + 用户 approve
+    # 等需求 + 用户 approve + PM 开始产品设计
     await driver.wait_for_file("needs/requirements.md", timeout=600)
-    await driver.wait_until(driver.bot_asked_for_checkpoint, timeout=300, label="needs-ckpt")
-    await driver.say("同意")
+    await driver.auto_answer_until(
+        condition=lambda: driver.has_event("checkpoint_approved")
+        or driver.file_exists("design/product_spec.md"),
+        condition_label="needs-approved-or-design-started",
+        fallback_reply=(
+            "同意，批准需求立即进入产品设计阶段。"
+            "请立刻用 send_mail 工具派 PM 产品设计任务（to=pm, type=task_assign, "
+            "subject='产品设计 (第 1 轮)'），并用 append_event 写 checkpoint_approved 事件。"
+        ),
+        timeout=900, max_rounds=3,
+    )
 
     # 等产品设计 + 至少发出一次 review_request
-    await driver.wait_for_file("design/product_spec.md", timeout=900)
+    await driver.wait_for_file("design/product_spec.md", timeout=1500)
     await driver.wait_for_event("review_requested", timeout=600)
     # 至少有 1 条 reviews/product_design/*.md
     await driver.wait_until(

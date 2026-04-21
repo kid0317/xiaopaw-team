@@ -72,6 +72,8 @@ def build_agent_fn_map(
     @before_llm_call hook 注册到全局 event bus，并发时会跨角色串台。
     """
     m: dict[str, Any] = {}
+    # **每次调用创建一把新锁**（避免多次 asyncio.run 跨 loop 共享同把 Lock 实例）
+    team_lock = asyncio.Lock()
     for role in ROLES:
         fn = build_team_agent_fn(
             role=role,
@@ -82,8 +84,8 @@ def build_agent_fn_map(
             sandbox_url=sandbox_url,
             cron_tasks_path=cron_tasks_path,
         )
-        # 所有角色都进同一把全局锁，避免 before_llm_call 跨实例串台
-        fn = wrap_with_lock(fn)
+        # 所有 4 角色共享这一把 team_lock，避免 before_llm_call 跨实例串台
+        fn = wrap_with_lock(fn, team_lock)
         m[role] = fn
     return m
 

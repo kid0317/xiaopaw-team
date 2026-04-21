@@ -122,14 +122,21 @@ class WorkspaceSafeguard:
     def restore(self) -> None:
         if not self._active:
             return
-        # 先删除 workspace 内容（保留 .git 等顶层无关文件如有的话——此 workspace/ 不是 git repo 根）
-        if REAL_WORKSPACE.exists():
-            shutil.rmtree(REAL_WORKSPACE)
-        shutil.copytree(self._backup_dir, REAL_WORKSPACE, symlinks=True)
+        # 先删除 workspace 内容（允许部分失败 + 重试）
+        # 有时沙盒异步任务还在写，rmtree 可能遇到 ENOENT/EEXIST
+        for attempt in range(3):
+            try:
+                if REAL_WORKSPACE.exists():
+                    shutil.rmtree(REAL_WORKSPACE, ignore_errors=True)
+                break
+            except OSError:
+                import time as _t; _t.sleep(0.5)
+        # 用 `copytree` with dirs_exist_ok，避免 "File exists" 错误
+        shutil.copytree(self._backup_dir, REAL_WORKSPACE, symlinks=True, dirs_exist_ok=True)
         # 清理备份
         shutil.rmtree(self._backup_dir, ignore_errors=True)
         self._active = False
-        print(f"[SAFEGUARD] workspace restored from backup")
+        print("[SAFEGUARD] workspace restored from backup")
 
 
 @dataclass
@@ -343,51 +350,49 @@ class E2EDriver:
         *,
         condition: Callable[[], bool],
         condition_label: str,
-        fallback_reply: str = "由你全权决定，所有合理默认值都批准同意，请按 SOP 立即推进。",
+        fallback_reply: str = (
+            "由你全权决定，所有合理默认值都批准同意。"
+            "请立刻调用 create_project 工具创建项目并起草 needs/requirements.md，"
+            "然后按 SOP 推进产品设计阶段。"
+        ),
         max_rounds: int = 8,
         timeout: float | None = None,
-        reply_gap: float = 8.0,
+        reply_gap: float = 4.0,
     ) -> None:
         """反复回复 Bot 的澄清问题直到 condition() 返回 True。
 
-        典型用法：
-            await driver.auto_answer_until(
-                condition=lambda: driver.has_event("project_created"),
-                condition_label="project_created",
-                timeout=900,
-            )
+        循环逻辑（修复：先回复，再等 bot，避免卡在 wait_until timeout）：
+        - round 0: 若 condition 已满足 → return
+        - 否则：say(fallback) → 等 bot reply (带 timeout) → check condition
+        - 最多 max_rounds 次 fallback 回复
         """
         timeout = timeout or self.options.long_wait
         deadline = time.time() + timeout
         rounds = 0
-        last_bot_count = len(self.sender.messages)
-        while time.time() < deadline:
-            if condition():
-                print(f"[AUTO_ANSWER] ✅ condition {condition_label!r} met after {rounds} reply rounds")
-                return
-            # wait for bot to respond to us (new message from bot after we last spoke)
+        # 初始检查
+        if condition():
+            print(f"[AUTO_ANSWER] ✅ condition {condition_label!r} already met at entry")
+            return
+        while time.time() < deadline and rounds < max_rounds:
+            rounds += 1
+            print(f"[AUTO_ANSWER] round {rounds}: replying to push past clarification")
+            last_bot_count = len(self.sender.messages)
+            await self.say(fallback_reply)
+            # 给 bot 时间回复（最多 300s 或剩余 deadline）
             try:
                 await self.wait_until(
-                    lambda: len(self.sender.messages) > last_bot_count,
-                    timeout=min(300, deadline - time.time()),
+                    lambda: len(self.sender.messages) > last_bot_count or condition(),
+                    timeout=min(300, max(10, deadline - time.time())),
                     label=f"bot-reply-r{rounds}",
                 )
             except TimeoutError:
-                print(f"[AUTO_ANSWER] ⚠️  no bot reply in round {rounds}; retrying")
+                print(f"[AUTO_ANSWER] ⚠️  no bot reply in round {rounds}")
             if condition():
-                print(f"[AUTO_ANSWER] ✅ condition {condition_label!r} met mid-round")
+                print(f"[AUTO_ANSWER] ✅ condition {condition_label!r} met after round {rounds}")
                 return
-            rounds += 1
-            if rounds > max_rounds:
-                raise TimeoutError(f"auto_answer exceeded max_rounds={max_rounds} without {condition_label}")
-            last_bot_count = len(self.sender.messages)
             await asyncio.sleep(reply_gap)
-            if condition():
-                return
-            print(f"[AUTO_ANSWER] round {rounds}: replying to push past clarification")
-            await self.say(fallback_reply)
         raise TimeoutError(
-            f"auto_answer_until({condition_label}) 超时 {timeout}s after {rounds} rounds"
+            f"auto_answer_until({condition_label}) 超时 {timeout}s / rounds={rounds}"
         )
 
     # ── 调试 / 快照 ────────────────────────────────────────────────────────

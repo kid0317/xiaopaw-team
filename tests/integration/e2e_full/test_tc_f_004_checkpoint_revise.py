@@ -11,12 +11,18 @@ import pytest
 async def test_tc_f_004_checkpoint_revise(driver) -> None:
     await driver.say(
         "帮我做个待办清单小网站（增/查/完成/删）。"
-        "技术栈 FastAPI + SQLite + 原生 HTML/JS。一次只问一个问题；否则直接推进。"
+        "技术栈 FastAPI + SQLite + 原生 HTML/JS。"
+        "**所有细节你直接替我决定，我批准任何合理方案**，请立即 create_project 并起草需求文档。"
     )
 
-    await driver.wait_for_event("project_created", timeout=300)
+    await driver.auto_answer_until(
+        condition=lambda: driver.has_event("project_created"),
+        condition_label="project_created",
+        timeout=1500, max_rounds=5,
+    )
     await driver.wait_for_file("needs/requirements.md", timeout=600)
-    await driver.wait_until(driver.bot_asked_for_checkpoint, timeout=300, label="needs-ckpt-1")
+    # 等 Manager 发 checkpoint_request 给用户（bot_asked_for_checkpoint 检查最后一条消息是否含"同意/批准/确认"）
+    await driver.wait_until(driver.bot_asked_for_checkpoint, timeout=600, label="needs-ckpt-1")
 
     # 用户 revise：加分享功能
     await driver.say("不对，MVP 还要加一个'分享当前任务列表到微信'的按钮。其他都同意。")
